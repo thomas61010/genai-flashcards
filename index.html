@@ -35,6 +35,7 @@
     background:var(--card); border:1px solid var(--line); border-radius:16px;
     padding:20px 18px; box-shadow:0 6px 20px rgba(0,0,0,.06);
     min-height:42vh; display:flex; flex-direction:column; justify-content:center; gap:14px;
+    touch-action: manipulation; 
   }
   .term{font-size:clamp(18px,4.6vw,24px); font-weight:700;}
   .meaning{font-size:clamp(16px,4.2vw,20px);}
@@ -347,6 +348,8 @@ const flashcards = [
   ["国際動向の把握","EU/US/各国規制を追う。"],
   ["コミュニティ参加","知見共有と相互検証。"],
   ["モデルカード整備","用途/限界/倫理配慮を公開。"]
+  ["リスクコミュニケーション","リスク/対応方針を関係者に分かりやすく伝える活動。"],
+  ["変更履歴（チェンジログ）","更新内容を時系列に記録し、原因追跡と説明責任を支える文書。"]
 ];
 
 /* ========= アプリ本体 ========= */
@@ -429,14 +432,32 @@ document.addEventListener('keydown', (e)=>{
   if(e.key==='ArrowLeft') prev();
 });
 
-// スワイプ
-let touchStartX=null;
-elCard.addEventListener('touchstart', e=>{ touchStartX = e.changedTouches[0].clientX; });
-elCard.addEventListener('touchend', e=>{
-  const dx = e.changedTouches[0].clientX - (touchStartX ?? 0);
-  if(Math.abs(dx)>40){ if(dx<0) next(); else prev(); } else { flip(); }
-  touchStartX=null;
-});
+// スワイプ（ボタン押下は無視する）
+let touchStartX = null;
+
+function isButtonArea(target){
+  return !!(target.closest('button') || target.closest('.actions'));
+}
+
+elCard.addEventListener('touchstart', (e)=>{
+  if (isButtonArea(e.target)) { touchStartX = null; return; }
+  touchStartX = e.changedTouches[0].clientX;
+}, {passive:true});
+
+elCard.addEventListener('touchend', (e)=>{
+  if (isButtonArea(e.target)) return;
+
+  const start = touchStartX;
+  touchStartX = null;
+  if (start == null) return;
+
+  const dx = e.changedTouches[0].clientX - start;
+  if (Math.abs(dx) > 40) { 
+    if (dx < 0) next(); else prev(); 
+  } else { 
+    flip(); 
+  }
+}, {passive:true});
 
 // 初期化
 document.addEventListener('DOMContentLoaded', applyFilterAndSearch);
