@@ -1,16 +1,332 @@
-
 <!doctype html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>生成AIパスポート・フラッシュカード</title>
+<style>
+  :root{
+    --bg:#f6f7fb; --card:#ffffff; --text:#0b1220; --muted:#6b7280;
+    --accent:#0a84ff; --line:#e5e7eb; --btn-bg:#ffffff; --btn-bd:#d1d5db;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{
+    margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;
+    line-height:1.6;
+  }
+  header{
+    position:sticky; top:0; z-index:10; background:rgba(246,247,251,.92);
+    backdrop-filter:saturate(1.2) blur(8px);
+    border-bottom:1px solid var(--line); padding:env(safe-area-inset-top) 12px 10px 12px;
+  }
+  .wrap{max-width:720px; margin:0 auto; padding:0 8px;}
+  .hrow{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  h1{font-size:17px; margin:6px 0 10px 0; font-weight:700;}
+  .controls{display:flex; gap:8px;}
+  input[type="search"],select,button{
+    font-size:16px; padding:10px 12px; border-radius:12px;
+    border:1px solid var(--btn-bd); background:var(--btn-bg); color:var(--text);
+  }
+  input[type="search"]{flex:1; min-width:40%;}
+  button.primary{background:var(--accent); color:#fff; border-color:var(--accent);}
+  main{padding:16px;}
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:20px 18px; box-shadow:0 6px 20px rgba(0,0,0,.06);
+    min-height:42vh; display:flex; flex-direction:column; justify-content:center; gap:14px;
+  }
+  .term{font-size:clamp(18px,4.6vw,24px); font-weight:700;}
+  .meaning{font-size:clamp(16px,4.2vw,20px);}
+  .muted{color:var(--muted);}
+  .row{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+  .actions{display:flex; gap:10px; justify-content:center; flex-wrap:wrap;}
+  .pill{padding:6px 10px; background:#f1f5f9; border:1px solid var(--line); border-radius:999px; font-size:12px;}
+  footer{padding:18px; text-align:center; color:var(--muted); font-size:13px;}
+  .hidden{display:none;}
+</style>
 </head>
 <body>
-<h1>生成AIパスポート・フラッシュカード（デモ版 5 枚）</h1>
+<header>
+  <div class="wrap">
+    <div class="hrow">
+      <h1>生成AIパスポート・フラッシュカード</h1>
+      <span class="pill" id="total">合計 - 枚</span>
+    </div>
+    <div class="controls">
+      <input id="q" type="search" placeholder="検索（用語や説明）">
+      <select id="filter" aria-label="フィルタ">
+        <option value="all">すべて</option>
+        <option value="unknown">未習得のみ</option>
+        <option value="known">既習のみ</option>
+      </select>
+      <button id="shuffle" aria-label="順序をシャッフル">シャッフル</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div id="card" class="card" tabindex="0">
+      <div class="term" id="term">読み込み中…</div>
+      <div class="meaning hidden" id="meaning"></div>
+      <div class="row">
+        <div class="muted" id="progress"></div>
+        <div><span class="pill" id="statuspill">未習得</span></div>
+      </div>
+      <div class="actions">
+        <button id="prev">◀︎ 前へ</button>
+        <button id="flip" class="primary">裏返す / 表示</button>
+        <button id="next">次へ ▶︎</button>
+      </div>
+      <div class="actions">
+        <button id="again">Again（あとで）</button>
+        <button id="good" class="primary">Good（覚えた）</button>
+        <button id="resetLocal">進捗リセット</button>
+      </div>
+      <div class="muted" style="text-align:center">ヒント：カードをタップ／スペースで裏返し・左右スワイプで前後移動</div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    追加は <code>window.flashcards.push(["用語","説明"])</code> でOK。ファイル内の <code>flashcards</code> 配列に追記すれば増えます。
+  </div>
+</footer>
+
 <script>
-const flashcards = [["AI（人工知能）", "人間の知的作業を機械で実現しようとする研究分野・技術。"], ["機械学習", "データから規則や表現を自動学習するアプローチ。"], ["教師あり学習", "入力と正解（ラベル）から関数を学習。分類・回帰など。"], ["教師なし学習", "ラベルなしデータから構造を学ぶ。クラスタリングなど。"], ["強化学習", "報酬最大化の行動方策を学ぶ枠組み。"]];
-document.write("最初のカード: " + flashcards[0][0] + " - " + flashcards[0][1]);
+/* ========= データ（130枚） ========= */
+const flashcards = [
+  ["AI（人工知能）","人間の知的作業を機械で実現しようとする研究分野・技術の総称。"],
+  ["ダートマス会議","1956年に開催。AI研究の出発点とされる歴史的イベント。"],
+  ["AIとロボットの違い","AIは知的処理（ソフトウェア）、ロボットは身体（ハードウェア）。"],
+  ["AIの研究領域","探索・推論、知識表現、機械学習、自然言語、視覚、音声、計画など。"],
+  ["ルールベース","IF-THEN規則で推論する方式。知識獲得・保守が難しくスケールに限界。"],
+  ["機械学習（ML）","データから規則や表現を自動学習するアプローチ。"],
+  ["教師あり学習","入力と正解（ラベル）から関数を学習。分類・回帰で用いる。"],
+  ["教師なし学習","ラベルなしデータから構造を学ぶ。クラスタリング・次元圧縮など。"],
+  ["強化学習（RL）","報酬最大化の行動方策を学ぶ枠組み。状態・行動・報酬で表す。"],
+  ["ニューラルネットワーク","多数の重み付き結合を持つ関数近似器。勾配法で学習。"],
+  ["誤差逆伝播（BP）","損失の勾配を層ごとに連鎖計算して重みを更新する。"],
+  ["過学習","訓練には適合するが未知データで性能低下する状態。"],
+  ["正則化","モデルの複雑さを抑え汎化を高める（L1/L2、ドロップアウトなど）。"],
+  ["ドロップアウト","学習時にユニットを確率的に無効化し過学習を抑える。"],
+  ["転移学習","あるタスクの表現を別タスクへ再利用して性能向上を狙う。"],
+  ["弱いAI（ANI）","特定領域に特化したAI。現在の実用の大半。"],
+  ["強いAI（AGI）","人間並みの汎用知能の概念。未実現で論点多数。"],
+  ["第一次AIブーム","探索・推論中心（1960年代）。組合せ爆発が壁。"],
+  ["第二次AIブーム","エキスパートシステム（1980年代）。知識獲得がボトルネック。"],
+  ["第三次AIブーム","深層学習の成功（2010年代〜）。大量データと計算資源で飛躍。"],
+  ["シンギュラリティ","AIが人類の知性を超える仮想的転換点。実現性や時期は議論。"],
+
+  ["生成AI","学習した分布に基づいて新しいテキスト・画像・音声・動画を生成。"],
+  ["自己回帰モデル","直前までの出力を条件に次トークン確率を予測して生成。"],
+  ["自己注意（Self-Attention）","系列内の関係を重み付けて表現。長距離依存を効率に捉える。"],
+  ["CNN","畳み込みで局所特徴抽出。画像分野で広く利用。"],
+  ["RNN","時系列を順に処理。LSTM/GRUで長依存を緩和。"],
+  ["LSTM","長短期記憶を持つRNN。勾配消失を緩和。"],
+  ["VAE","潜在変数に正則化を課す生成モデル。連続潜在空間で補間が可能。"],
+  ["GAN","生成器と識別器の対戦で分布を学習。高品質画像生成。"],
+  ["Transformer","自己注意を中核とするモデル。並列計算が容易でLLMの基盤。"],
+  ["Encoder-Decoder","入力をエンコードし条件付きでデコード（翻訳など）。"],
+  ["事前学習","大規模データで汎用表現を学ぶ段階。"],
+  ["微調整（Fine-tuning）","目的タスクで追加学習して適応させる段階。"],
+  ["RLHF","人間評価から報酬モデルを学び方策を最適化。望ましい応答へ。"],
+  ["GPT-1","2018年。事前学習＋微調整の有効性を提示。"],
+  ["GPT-2","大規模化で高品質生成を実証。"],
+  ["GPT-3","さらに大規模化と少数ショット汎用性で話題に。"],
+  ["GPT-3.5","指示追従が向上しチャット用途が一般化。"],
+  ["GPT-4","マルチモーダル化と堅牢性の向上。"],
+  ["GPT-4o","音声・画像・テキストを統合的に扱う高速応答モデル。"],
+  ["GPTs（カスタムGPT）","用途特化の振る舞い・ツールを設定できるエージェント。"],
+  ["Code Interpreter","安全な環境でコード実行・解析・可視化を行う機能。"],
+  ["Claude","AnthropicのLLM。憲法AIなど安全性重視。"],
+  ["Gemini","Googleのマルチモーダルモデル群。検索連携が強み。"],
+  ["Stable Diffusion","拡散モデル系の画像生成。ローカル実行やカスタムが容易。"],
+  ["DALL·E","テキストから画像生成・編集・バリエーション。"],
+  ["Flux","拡散系の派生モデル群。高速化や画質改善を志向。"],
+  ["Sora","OpenAIのテキスト→動画生成。物理一貫性の高い映像。"],
+  ["Runway Gen-3","Runwayの映像生成。演出制御や合成に強み。"],
+  ["Luma Dream Machine","Lumaの動画生成。被写体のリアルさに定評。"],
+
+  ["テキスト生成AI","要約・翻訳・校正・文体変換・アイデア出し等に活用。"],
+  ["画像生成AI","イラスト/写真風生成・修復・拡張・スタイル変換。"],
+  ["音声生成AI","音声合成・音声変換・ボイスクローニング。"],
+  ["動画生成AI","短尺から長尺まで参照素材やプロンプトで生成。"],
+  ["データ拡張","学習データに変換を加えて多様性を増やし汎化を助ける。"],
+  ["ハルシネーション","事実と異なる内容をもっともらしく出力する現象。"],
+  ["ディープフェイク","人物の見た目・声の合成や置換。悪用リスクに注意。"],
+  ["ディスインフォメーション","意図的な誤情報拡散。生成AIでスケール懸念。"],
+
+  ["インターネットリテラシー","ネットの仕組みと危険を理解し適切に扱う能力。"],
+  ["フィッシング詐欺","正規装い情報を盗む。URL確認・2段階認証で対策。"],
+  ["スミッシング","SMSを悪用したフィッシング。短縮URLに要注意。"],
+  ["QRコード詐欺","偽QRで悪性サイトへ誘導。店頭貼付の上書きに警戒。"],
+  ["公衆Wi-Fiの危険","暗号化不足や偽APで傍受の恐れ。VPNやHTTPS確認。"],
+  ["アップロード先の選定","機密や個人情報は公開系に上げない。規約と保存先を確認。"],
+  ["危険なWebコンテンツ","違法/不正サイト、マルウェア配布、偽ソフト等。"],
+  ["ソーシャルエンジニアリング","心理を突いて情報を盗む。肩越し覗き・なりすまし等。"],
+  ["プライバシー設定","公開範囲や権限を適切に設定し露出を抑える。"],
+  ["生成AIの脅威","偽情報・著作権侵害・機密漏洩などリスクも増加。"],
+
+  ["個人情報保護法","個人情報の取得・利用・提供・安全管理を定める基本法。"],
+  ["個人情報の定義","生存する個人に関する情報で特定の個人を識別できるもの。"],
+  ["要配慮個人情報","差別や不利益の恐れがあるセンシティブ情報。慎重な取扱い。"],
+  ["匿名加工情報","個人を識別できないよう一定基準で加工。再識別防止が要件。"],
+  ["仮名加工情報","戻せる前提で識別子を置換。社内分析などで活用。"],
+  ["センサー/個人関連情報","位置・生体・端末ID等は個人関連情報となり得る。"],
+  ["医療データの取扱い","要配慮情報として高い安全管理。匿名化指針に従う。"],
+  ["知的財産権","発明・著作物・商標などの権利。生成AIでは著作権に注意。"],
+  ["著作権（日本）","創作的表現を保護。複製・公衆送信などの権利がある。"],
+  ["保護対象外","アイデア・データ・事実は著作権の対象外。"],
+  ["二次的著作物","既存著作物の翻案など。権利処理が必要。"],
+  ["引用の要件","公正な慣行・主従関係・出所明示など。"],
+  ["著作者人格権","公表権・氏名表示権・同一性保持権。譲渡不可。"],
+  ["肖像権/プライバシー権","個人の姿や私生活をみだりに公開されない権利利益。"],
+  ["不正競争防止法","営業秘密の不正取得・使用等を禁止。機密プロンプト等も対象になり得る。"],
+  ["AI生成物の著作権","人の創作的関与があれば著作物性が認められ得る。AI単独は原則対象外。"],
+  ["AI生成物の帰属","契約・規約で成果物の帰属と利用範囲を明確化する。"],
+  ["既存著作物との類似","学習/参照で近似するリスク。検索・照合・出典管理で低減。"],
+  ["AI社会の基本理念","人間中心・尊厳・多様性と包摂・持続可能性など。"],
+  ["AI社会原則（日本）","安全・公正・透明性・説明責任・プライバシー保護等。"],
+  ["AIガバナンス","リスク評価・管理体制・監査・改善サイクルを継続運用。"],
+  ["AIの三主体","開発者・提供者・利用者の役割と責任を区別。"],
+
+  ["LM（言語モデル）","先行文脈から次のトークン確率分布を出すモデル。"],
+  ["LLM（大規模言語モデル）","大規模データ/パラメータで高い汎化と生成性能を持つ。"],
+  ["温度（temperature）","サンプリングのランダム性。高いほど多様、低いほど確実。"],
+  ["トップP（nucleus）","確率質量pまでの上位からサンプリング。"],
+  ["プロンプトエンジニアリング","指示・文脈・例示・出力形式の工夫で品質向上。"],
+  ["Zero-shot","例示なしで指示のみで実行させる。"],
+  ["Few-shot","少数の入出力例を文脈として提示。"],
+  ["役割指示","視点・口調・制約を明示し一貫した応答を得る。"],
+  ["出力インジケータ","箇条書き・JSON・表など形式を指定。"],
+  ["文の校正","誤字脱字・文法・表記統一・簡潔化などを依頼。"],
+  ["文の整理（構造化）","段落分け・見出し化・要点抽出で読みやすさ向上。"],
+  ["要約","主要情報を短く再表現（抽出的/抽象的）。"],
+  ["箇条書き変換","文章をリスト化し視認性を高める。"],
+  ["文体変更","丁寧語↔カジュアル、専門家視点などのスタイル変更。"],
+  ["数式の変換","自然文↔式、単位換算、定義の明確化。"],
+  ["メール作成","目的・相手・締切・要件を明示し簡潔に。"],
+  ["アンケート項目作成","目的と仮説から設問・選択肢・尺度を設計。"],
+  ["アンケート分析","集計・クロス・自由記述のコーディング等。"],
+  ["キャッチコピー作成","ターゲット・便益・差別化を短く表現。"],
+  ["業務手順の分解","工程をタスクに分解し役割・前提・成果物を整理。"],
+  ["タスク抽出","会話や文章からToDo候補を抽出し優先付け。"],
+  ["翻訳の留意点","用語統一・固有名詞・文脈保持・自然さと忠実さのバランス。"],
+  ["英文メール作成","件名/挨拶/要点/締めなどの書式化。"],
+  ["議事録の整理","議題・決定・宿題・期限を構造化。"],
+  ["ブレインストーミング","発散→収束で多案を出し評価軸で選定。"],
+  ["不得意：厳密計算","桁落ちや厳密性は苦手。外部ツール併用が安全。"],
+  ["不得意：最新情報","学習以降の事実は誤りやすい。一次情報で検証。"],
+  ["不得意：芸術批評","主観が強い評価は限界。基準を具体化。"],
+
+  ["AI社会原則：安全性","安全な設計・運用と事前の危険分析を行う。"],
+  ["AI社会原則：公正性","差別や不当な扱いを回避し公平性を担保。"],
+  ["AI社会原則：透明性","仕組みや限界、データの扱いを明確化。"],
+  ["AI社会原則：説明責任","判断の根拠や手順を説明可能にする。"],
+  ["AI社会原則：プライバシー保護","個人データの最小化と適切な管理。"],
+  ["AI社会原則：セキュリティ確保","攻撃や改ざんに強い仕組みを持つ。"],
+  ["AI社会原則：人間中心","人間の尊厳と意思決定を尊重。"],
+  ["AI社会原則：多様性と包摂","多様な利用者に配慮して設計。"],
+  ["AI社会原則：持続可能性","社会・環境への影響に配慮。"],
+  ["AI社会原則：アカウンタビリティ","責任の所在と手続きを明確化。"],
+  ["AI社会原則：信頼性","一貫した結果を出す信頼できる動作。"],
+  ["AI社会原則：堅牢性","異常入力や外乱でも破綻しない設計。"]
+];
+
+/* ========= アプリ本体 ========= */
+const elCard = document.getElementById('card');
+const elTerm = document.getElementById('term');
+const elMeaning = document.getElementById('meaning');
+const elProgress = document.getElementById('progress');
+const elStatus = document.getElementById('statuspill');
+const elFlip = document.getElementById('flip');
+const elPrev = document.getElementById('prev');
+const elNext = document.getElementById('next');
+const elAgain = document.getElementById('again');
+const elGood = document.getElementById('good');
+const elShuffle = document.getElementById('shuffle');
+const elFilter = document.getElementById('filter');
+const elQ = document.getElementById('q');
+const elTotal = document.getElementById('total');
+
+let order = [];
+let idx = 0;
+let showingMeaning = false;
+const storeKey = "genai_passport_known_v1";
+function loadKnown(){ try{ return new Set(JSON.parse(localStorage.getItem(storeKey)||"[]")); }catch(e){ return new Set(); } }
+function saveKnown(s){ try{ localStorage.setItem(storeKey, JSON.stringify(Array.from(s))); }catch(e){} }
+let known = loadKnown();
+
+function norm(s){ return (s||"").toLowerCase(); }
+
+function applyFilterAndSearch(){
+  const mode = elFilter.value;
+  const q = norm(elQ.value.trim());
+  order = flashcards.map((_,i)=>i).filter(i=>{
+    const k = norm(flashcards[i][0] + " " + flashcards[i][1]);
+    const match = !q || k.includes(q);
+    const isKnown = known.has(i);
+    if(mode==="known") return match && isKnown;
+    if(mode==="unknown") return match && !isKnown;
+    return match;
+  });
+  if(order.length===0){ order=[0]; }
+  idx = 0; showingMeaning = false; render();
+}
+
+function render(){
+  const i = order[idx] ?? 0;
+  const term = flashcards[i][0];
+  const meaning = flashcards[i][1];
+  elTerm.textContent = term;
+  elMeaning.textContent = meaning;
+  elMeaning.classList.toggle('hidden', !showingMeaning);
+  elProgress.textContent = "カード " + (idx+1) + " / " + order.length;
+  const isKnown = known.has(i);
+  elStatus.textContent = isKnown ? "既習" : "未習得";
+  elTotal.textContent = "合計 " + flashcards.length + " 枚";
+}
+
+function flip(){ showingMeaning = !showingMeaning; render(); }
+function next(){ idx = (idx+1) % order.length; showingMeaning=false; render(); }
+function prev(){ idx = (idx-1 + order.length) % order.length; showingMeaning=false; render(); }
+function markKnown(v){
+  const i = order[idx];
+  if(v) known.add(i); else known.delete(i);
+  saveKnown(known); render();
+}
+
+/* === イベント === */
+elFlip.addEventListener('click', flip);
+elNext.addEventListener('click', next);
+elPrev.addEventListener('click', prev);
+elAgain.addEventListener('click', ()=>markKnown(false));
+elGood.addEventListener('click', ()=>markKnown(true));
+elShuffle.addEventListener('click', ()=>{ order.sort(()=>Math.random()-0.5); idx=0; render(); });
+elFilter.addEventListener('change', applyFilterAndSearch);
+elQ.addEventListener('input', applyFilterAndSearch);
+document.getElementById('resetLocal').addEventListener('click', ()=>{ known.clear(); saveKnown(known); applyFilterAndSearch(); });
+
+document.addEventListener('keydown', (e)=>{
+  if(e.key===' ' || e.key==='Enter'){ e.preventDefault(); flip(); }
+  if(e.key==='ArrowRight') next();
+  if(e.key==='ArrowLeft') prev();
+});
+
+// スワイプ
+let touchStartX=null;
+elCard.addEventListener('touchstart', e=>{ touchStartX = e.changedTouches[0].clientX; });
+elCard.addEventListener('touchend', e=>{
+  const dx = e.changedTouches[0].clientX - (touchStartX ?? 0);
+  if(Math.abs(dx)>40){ if(dx<0) next(); else prev(); } else { flip(); }
+  touchStartX=null;
+});
+
+// 初期化
+document.addEventListener('DOMContentLoaded', applyFilterAndSearch);
 </script>
 </body>
 </html>
