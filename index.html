@@ -432,30 +432,33 @@ document.addEventListener('keydown', (e)=>{
   if(e.key==='ArrowLeft') prev();
 });
 
-// スワイプ（ボタン押下は無視する）
+// スワイプ（ボタン押下で始まったタッチは最後まで無視）
 let touchStartX = null;
+let touchStartedOnButton = false;
 
 function isButtonArea(target){
   return !!(target.closest('button') || target.closest('.actions'));
 }
 
 elCard.addEventListener('touchstart', (e)=>{
-  if (isButtonArea(e.target)) { touchStartX = null; return; }
+  touchStartedOnButton = isButtonArea(e.target);
+  if (touchStartedOnButton) { touchStartX = null; return; }
   touchStartX = e.changedTouches[0].clientX;
 }, {passive:true});
 
 elCard.addEventListener('touchend', (e)=>{
-  if (isButtonArea(e.target)) return;
+  // ボタン上で始まったタッチなら、離れた場所がどこでも無視
+  if (touchStartedOnButton) { touchStartedOnButton = false; return; }
 
   const start = touchStartX;
   touchStartX = null;
   if (start == null) return;
 
   const dx = e.changedTouches[0].clientX - start;
-  if (Math.abs(dx) > 40) { 
-    if (dx < 0) next(); else prev(); 
-  } else { 
-    flip(); 
+  if (Math.abs(dx) > 40) {
+    if (dx < 0) next(); else prev();
+  } else {
+    flip();
   }
 }, {passive:true});
 
