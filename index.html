@@ -109,8 +109,8 @@
         <button id="good" type="button" class="primary">Good（覚えた）</button>
         <button id="resetLocal" type="button">進捗リセット</button>
       </div>
-      <div class="muted" style="text-align:center">ヒント：カードをタップ／スペースで裏返し・左右スワイプで前後移動</div>
     </div>
+    
     <!-- 外部検索（フッター操作の直下） -->
     <div class="lookup-wrap">
       <input id="lookup" type="search" placeholder="外部検索（用語）"
@@ -554,9 +554,9 @@ function buildUrl(site,q){
   switch(site){
     case 'wiki':  return `https://ja.wikipedia.org/wiki/Special:Search?search=${e}`;
     case 'qiita': return `https://qiita.com/search?q=${e}`;
-    case 'ipa':   return `https://www.google.com/search?q=site:ipa.go.jp+${e}`;
-    case 'egov':  return `https://www.google.com/search?q=site:elaws.e-gov.go.jp+${e}`;
-    case 'google':default: return `https://www.google.com/search?q=${e}`;
+    case 'ipa':   return `https://www.google.com/search?gbv=1&q=site:ipa.go.jp+${e}`;
+    case 'egov':  return `https://www.google.com/search?gbv=1&q=site:elaws.e-gov.go.jp+${e}`;
+    case 'google':default: return `https://www.google.com/search?gbv=1&q=${e}`;
   }
 }
 
@@ -597,6 +597,26 @@ document.querySelectorAll('.lkp-site').forEach(b=>{
   b.addEventListener('click', ()=> goSearch(b.dataset.site));
 });
 elLkpClear.addEventListener('click', ()=>{ localStorage.removeItem(LK_REC_KEY); renderRecents(); });
+  
+// --- iOSキーボード対策：lookup を見える位置に＆下余白 ---
+const vv = window.visualViewport;
+function ensureLookupVisible() {
+  try {
+    elLookup.scrollIntoView({block: 'center'}); // 入力欄を中央に持ってくる
+  } catch(e) {}
+}
+elLookup.addEventListener('focus', ensureLookupVisible);
+
+// キーボード出現時はボトム余白を付与（戻ると消す）
+if (vv) {
+  const padTarget = document.querySelector('main'); // 余白を付ける場所
+  const onVV = () => {
+    const overlap = Math.max(0, (window.innerHeight - vv.height)); // だいたいキーボードの高さ
+    padTarget.style.paddingBottom = overlap ? (overlap + 24) + 'px' : '';
+  };
+  vv.addEventListener('resize', onVV);
+  vv.addEventListener('scroll', onVV);
+}
 
 // 初期化
 document.addEventListener('DOMContentLoaded', applyFilterAndSearch);
