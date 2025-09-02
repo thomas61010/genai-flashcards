@@ -34,7 +34,7 @@
   .card{
     background:var(--card); border:1px solid var(--line); border-radius:16px;
     padding:20px 18px; box-shadow:0 6px 20px rgba(0,0,0,.06);
-    min-height:42vh; display:flex; flex-direction:column; justify-content:center; gap:14px;
+    min-height:42vh; display:flex; flex-direction:column; justify-content:flex-start; gap:14px;
     touch-action: manipulation; 
   }
   .term{font-size:clamp(18px,4.6vw,24px); font-weight:700;}
@@ -68,6 +68,17 @@
 
 @media (max-width:640px){
   .lkp-panel{width:94vw; top:auto; bottom:0; transform:translate(-50%,0); border-bottom-left-radius:0; border-bottom-right-radius:0}
+}
+  /* キーボード高さを反映して下に余白を作る */
+main { padding-bottom: calc(var(--kb, 0px) + 24px); }
+
+/* 検索バーを画面下に“張り付く風”に（カード外に置いた前提） */
+.lookup-wrap {
+  position: sticky;
+  bottom: 8px;
+  z-index: 5;
+  background: var(--bg);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 </style>
 </head>
@@ -613,6 +624,20 @@ if (vv) {
   };
   vv.addEventListener('resize', onVV);
   vv.addEventListener('scroll', onVV);
+}
+// --- iOSキーボード対策：visualViewportで余白を調整＆フォーカス時スクロール ---
+const vv = window.visualViewport;
+function ensureLookupVisible(){ try{ elLookup.scrollIntoView({block:'center'}); }catch(e){} }
+elLookup.addEventListener('focus', ensureLookupVisible);
+
+if (vv) {
+  const setKb = () => {
+    const overlap = Math.max(0, window.innerHeight - vv.height); // ≒ キーボードの高さ
+    document.documentElement.style.setProperty('--kb', overlap ? (overlap + 16) + 'px' : '0px');
+  };
+  vv.addEventListener('resize', setKb);
+  vv.addEventListener('scroll', setKb);
+  setKb();
 }
 
 // 初期化
