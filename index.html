@@ -606,38 +606,26 @@ document.querySelectorAll('.lkp-site').forEach(b=>{
 });
 elLkpClear.addEventListener('click', ()=>{ localStorage.removeItem(LK_REC_KEY); renderRecents(); });
   
-// --- iOSキーボード対策：lookup を見える位置に＆下余白 ---
-const vv = window.visualViewport;
-function ensureLookupVisible() {
-  try {
-    elLookup.scrollIntoView({block: 'center'}); // 入力欄を中央に持ってくる
-  } catch(e) {}
-}
-elLookup.addEventListener('focus', ensureLookupVisible);
+// --- iOSキーボード対策（重複ガード付き） ---
+if (!window.__kbPatchInstalled) {
+  window.__kbPatchInstalled = true;
 
-// キーボード出現時はボトム余白を付与（戻ると消す）
-if (vv) {
-  const padTarget = document.querySelector('main'); // 余白を付ける場所
-  const onVV = () => {
-    const overlap = Math.max(0, (window.innerHeight - vv.height)); // だいたいキーボードの高さ
-    padTarget.style.paddingBottom = overlap ? (overlap + 24) + 'px' : '';
-  };
-  vv.addEventListener('resize', onVV);
-  vv.addEventListener('scroll', onVV);
-}
-// --- iOSキーボード対策：visualViewportで余白を調整＆フォーカス時スクロール ---
-const vv = window.visualViewport;
-function ensureLookupVisible(){ try{ elLookup.scrollIntoView({block:'center'}); }catch(e){} }
-elLookup.addEventListener('focus', ensureLookupVisible);
+  const vv = window.visualViewport;
 
-if (vv) {
-  const setKb = () => {
-    const overlap = Math.max(0, window.innerHeight - vv.height); // ≒ キーボードの高さ
-    document.documentElement.style.setProperty('--kb', overlap ? (overlap + 16) + 'px' : '0px');
-  };
-  vv.addEventListener('resize', setKb);
-  vv.addEventListener('scroll', setKb);
-  setKb();
+  function ensureLookupVisible(){
+    try { setTimeout(()=>{ elLookup.scrollIntoView({block:'center'}); }, 50); } catch(e){}
+  }
+  elLookup.addEventListener('focus', ensureLookupVisible);
+
+  if (vv) {
+    const setKb = () => {
+      const overlap = Math.max(0, window.innerHeight - vv.height); // ≒キーボード高さ
+      document.documentElement.style.setProperty('--kb', overlap ? (overlap + 16) + 'px' : '0px');
+    };
+    vv.addEventListener('resize', setKb);
+    vv.addEventListener('scroll', setKb);
+    setKb();
+  }
 }
 
 // 初期化
