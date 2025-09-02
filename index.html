@@ -45,6 +45,30 @@
   .pill{padding:6px 10px; background:#f1f5f9; border:1px solid var(--line); border-radius:999px; font-size:12px;}
   footer{padding:18px; text-align:center; color:var(--muted); font-size:13px;}
   .hidden{display:none;}
+  .lookup-wrap{display:flex; gap:8px; margin:12px auto 0; max-width:720px}
+.lookup-wrap input{flex:1; padding:12px; border:1px solid var(--btn-bd); border-radius:12px; background:var(--btn-bg)}
+.lookup-wrap button{padding:0 14px; border:1px solid var(--btn-bd); border-radius:12px; background:var(--btn-bg); font-size:16px}
+
+.lkp-modal[hidden]{display:none}
+.lkp-modal{position:fixed; inset:0; z-index:50}
+.lkp-backdrop{position:absolute; inset:0; background:rgba(0,0,0,.35)}
+.lkp-panel{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:min(92vw,640px); max-height:80vh; overflow:auto; background:var(--card);
+  border:1px solid var(--line); border-radius:16px; box-shadow:0 12px 40px rgba(0,0,0,.22); padding:16px}
+.lkp-head{display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:12px}
+.lkp-close{border:1px solid var(--btn-bd); background:var(--btn-bg); border-radius:10px; padding:6px 10px}
+.lkp-sites{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px}
+.lkp-site{padding:10px 14px; border:1px solid var(--btn-bd); border-radius:12px; background:var(--btn-bg)}
+.lkp-recent{border-top:1px solid var(--line); padding-top:12px}
+.lkp-recent-head{font-size:12px; color:var(--muted); margin-bottom:8px}
+.lkp-recent-list{display:flex; gap:8px; flex-wrap:wrap}
+.lkp-recent-list .chip{padding:6px 10px; border:1px solid var(--btn-bd); border-radius:999px; background:#f1f5f9; font-size:13px}
+.lkp-clear{margin-top:8px; border:1px solid var(--btn-bd); background:var(--btn-bg); border-radius:10px; padding:6px 10px}
+.lkp-hint{margin-top:10px; font-size:12px; color:var(--muted); text-align:right}
+
+@media (max-width:640px){
+  .lkp-panel{width:94vw; top:auto; bottom:0; transform:translate(-50%,0); border-bottom-left-radius:0; border-bottom-right-radius:0}
+}
 </style>
 </head>
 <body>
@@ -85,7 +109,37 @@
         <button id="good" type="button" class="primary">Good（覚えた）</button>
         <button id="resetLocal" type="button">進捗リセット</button>
       </div>
+      <!-- 外部検索（フッター操作の直下） -->
+      <div class="lookup-wrap">
+        <input id="lookup" type="search" placeholder="外部検索（用語）"
+         aria-label="外部検索（用語）">
+        <button id="lookupOpen" type="button" aria-label="検索モーダルを開く">🔍</button>
+      </div>
       <div class="muted" style="text-align:center">ヒント：カードをタップ／スペースで裏返し・左右スワイプで前後移動</div>
+    </div>
+  </div>
+  <!-- 検索モーダル -->
+  <div id="lookupModal" class="lkp-modal" role="dialog" aria-modal="true" aria-labelledby="lkpTitle" hidden>
+    <div class="lkp-backdrop" data-close="1"></div>
+    <div class="lkp-panel" role="document">
+      <div class="lkp-head">
+        <h2 id="lkpTitle">🔍 「<span id="lkpQuery">-</span>」を検索</h2>
+        <button id="lkpClose" type="button" class="lkp-close" aria-label="閉じる">✕</button>
+      </div>
+      <div class="lkp-sites">
+        <!-- 並び: Wiki / IPA / e-Gov / Qiita / Google -->
+        <button class="lkp-site" data-site="wiki"  type="button">Wikipedia</button>
+        <button class="lkp-site" data-site="ipa"   type="button">IPA</button>
+        <button class="lkp-site" data-site="egov"  type="button">e-Gov</button>
+        <button class="lkp-site" data-site="qiita" type="button">Qiita</button>
+        <button class="lkp-site" data-site="google"type="button">Google</button>
+      </div>
+      <div class="lkp-recent">
+        <div class="lkp-recent-head">最近の検索</div>
+        <div id="lkpRecent" class="lkp-recent-list"></div>
+        <button id="lkpClear" class="lkp-clear" type="button">履歴クリア</button>
+      </div>
+      <div class="lkp-hint">EnterでWikipediaに移動 / Escまたは背景タップ・下スワイプで閉じる</div>
     </div>
   </div>
 </main>
@@ -461,6 +515,88 @@ elCard.addEventListener('touchend', (e)=>{
     flip();
   }
 }, {passive:true});
+/* === 検索モーダル === */
+const LK_REC_KEY = "genai_search_recent_v1";
+const elLookup = document.getElementById('lookup');
+const elLookupOpen = document.getElementById('lookupOpen');
+const elLkp = document.getElementById('lookupModal');
+const elLkpQuery = document.getElementById('lkpQuery');
+const elLkpClose = document.getElementById('lkpClose');
+const elLkpRecent = document.getElementById('lkpRecent');
+const elLkpClear = document.getElementById('lkpClear');
+
+function normQuery(s){
+  const t = (s||"").replace(/\u3000/g,' ').replace(/\s+/g,' ').trim();
+  return t.length > 20 ? t.slice(0,20) : t;
+}
+function getRecents(){
+  try{ return JSON.parse(localStorage.getItem(LK_REC_KEY)||"[]"); }catch(e){ return []; }
+}
+function saveRecent(q){
+  if(!q) return;
+  let r = getRecents().filter(x=>x!==q);
+  r.unshift(q); if(r.length>5) r = r.slice(0,5);
+  localStorage.setItem(LK_REC_KEY, JSON.stringify(r));
+}
+function renderRecents(){
+  const r = getRecents();
+  elLkpRecent.innerHTML = '';
+  r.forEach(q=>{
+    const b = document.createElement('button');
+    b.type='button'; b.className='chip'; b.textContent=q;
+    b.addEventListener('click', ()=> openLookup(q));
+    elLkpRecent.appendChild(b);
+  });
+}
+
+function buildUrl(site,q){
+  const e = encodeURIComponent(q);
+  switch(site){
+    case 'wiki':  return `https://ja.wikipedia.org/wiki/Special:Search?search=${e}`;
+    case 'qiita': return `https://qiita.com/search?q=${e}`;
+    case 'ipa':   return `https://www.google.com/search?q=site:ipa.go.jp+${e}`;
+    case 'egov':  return `https://www.google.com/search?q=site:elaws.e-gov.go.jp+${e}`;
+    case 'google':default: return `https://www.google.com/search?q=${e}`;
+  }
+}
+
+let lastFocus=null;
+function openLookup(q){
+  const term = normQuery(q || elLookup.value || elTerm.textContent);
+  elLkpQuery.textContent = term || '-';
+  renderRecents();
+  elLkp.hidden = false;
+  document.body.style.overflow='hidden';
+  lastFocus = document.activeElement;
+  // EnterでWikipediaへ
+  elLkp.onkeydown = (e)=>{ if(e.key==='Escape') closeLookup(); if(e.key==='Enter'){ goSearch('wiki'); } };
+  // 背景タップ/下スワイプで閉じる
+  elLkp.addEventListener('click', (e)=>{ if(e.target.dataset.close) closeLookup(); });
+  let startY=null;
+  elLkp.addEventListener('touchstart', (e)=>{ if(e.target.classList.contains('lkp-panel')) return; startY=e.changedTouches[0].clientY; }, {passive:true});
+  elLkp.addEventListener('touchend', (e)=>{ if(startY==null) return; if(e.changedTouches[0].clientY-startY>60) closeLookup(); startY=null; }, {passive:true});
+}
+function closeLookup(){
+  elLkp.hidden = true;
+  document.body.style.overflow='';
+  if(lastFocus && lastFocus.focus) lastFocus.focus();
+}
+
+function goSearch(site){
+  const q = normQuery(elLkpQuery.textContent);
+  if(!q){ return; }
+  saveRecent(q);
+  window.location.href = buildUrl(site,q); // 同タブ遷移
+}
+
+// イベント
+elLookupOpen.addEventListener('click', ()=> openLookup(elLookup.value));
+elLookup.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); openLookup(elLookup.value); }});
+elLkpClose.addEventListener('click', closeLookup);
+document.querySelectorAll('.lkp-site').forEach(b=>{
+  b.addEventListener('click', ()=> goSearch(b.dataset.site));
+});
+elLkpClear.addEventListener('click', ()=>{ localStorage.removeItem(LK_REC_KEY); renderRecents(); });
 
 // 初期化
 document.addEventListener('DOMContentLoaded', applyFilterAndSearch);
